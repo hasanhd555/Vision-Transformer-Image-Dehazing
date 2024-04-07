@@ -5,22 +5,35 @@ import cv2
 
 from torch.utils.data import Dataset
 from utils import hwc_to_chw, read_img
-from skimage import exposure
+def dehazing_preproc(image):
+  """
+  This function performs pre-processing on an image for dehazing tasks using OpenCV.
+
+  Args:
+      image: The input image as a NumPy array.
+
+  Returns:
+      A NumPy array representing the pre-processed image in its original data type.
+  """
+  # Convert to grayscale (optional, might be useful for some algorithms)
+  og_dtype = image.dtype
+  #image = image.astype(np.uint8)
+
+  
+
+  # Apply CLAHE for local contrast enhancement (optional)
+  # clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+  # equalized_gray = clahe.apply(gray)
+
+  # Apply Gaussian filtering for denoising (adjust kernel size as needed)
+  blurred = cv2.GaussianBlur(image, (5, 5), 0)
+
+  # Combine the pre-processed grayscale back into a color image (optional)
+
+  # You can choose to return the grayscale or color pre-processed image based on your algorithm
+  return blurred.astype(og_dtype)  # Uncomment for color output
 
 
-def apply_ahe(img):
-    # Convert image to float in range [0, 1]
-    img_float = img.astype(np.float32) / 255.0
-
-    # Apply AHE to each channel separately
-    img_ahe = np.zeros_like(img_float)
-    for i in range(img_float.shape[2]):
-        img_ahe[:, :, i] = exposure.equalize_adapthist(img_float[:, :, i], clip_limit=0.03)
-
-    # Convert image back to the original data type
-    img_uint8 = (img_ahe).astype(img.dtype)
-
-    return img_uint8
 
 def white_balance(image):
   """
@@ -125,7 +138,7 @@ class PairLoader(Dataset):
 		target_img = read_img(os.path.join(self.root_dir, 'GT', img_name)) * 2 - 1
 
 		# Apply AHE to source and target images
-		source_img = white_balance(source_img)
+		source_img = dehazing_preproc(source_img)
 		
 		if self.mode == 'train':
 			[source_img, target_img] = augment([source_img, target_img], self.size, self.edge_decay, self.only_h_flip)
@@ -153,6 +166,6 @@ class SingleLoader(Dataset):
 		img = read_img(os.path.join(self.root_dir, img_name)) * 2 - 1
 
 		# Apply AHE to the image
-		img = white_balance(img)
+		img = dehazing_preproc(img)
 
 		return {'img': hwc_to_chw(img), 'filename': img_name}
