@@ -22,6 +22,38 @@ def apply_ahe(img):
 
     return img_uint8
 
+def white_balance(image):
+  """
+  This function performs white balance adjustment on an image using OpenCV.
+
+  Args:
+      image: The input image as a NumPy array.
+
+  Returns:
+      A NumPy array representing the white balanced image.
+  """
+  # Convert the image to grayscale
+  gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+
+  # Find the average intensity of the grayscale image (assuming white areas have high intensity)
+  avg_intensity = np.mean(gray)
+
+  # Calculate a scaling factor to adjust the intensity of all color channels
+  scale = 255.0 / avg_intensity
+
+  # Create a new image for the white balanced output
+  balanced_image = image.astype(np.float32)  # Convert to float32 for scaling
+
+  # Multiply each color channel by the scaling factor
+  balanced_image[:,:,0] *= scale  # Blue channel
+  balanced_image[:,:,1] *= scale  # Green channel
+  balanced_image[:,:,2] *= scale  # Red channel
+
+  # Clip the pixel values to be within the range [0, 255] and convert back to uint8
+  balanced_image = np.clip(balanced_image, 0, 255).astype(np.uint8)
+
+  return balanced_image
+
 def augment(imgs=[], size=256, edge_decay=0., only_h_flip=False):
 	H, W, _ = imgs[0].shape
 	Hc, Wc = [size, size]
@@ -92,7 +124,7 @@ class PairLoader(Dataset):
 		target_img = read_img(os.path.join(self.root_dir, 'GT', img_name)) * 2 - 1
 
 		# Apply AHE to source and target images
-		source_img = apply_ahe(source_img)
+		source_img = white_balance(source_img)
 		
 		if self.mode == 'train':
 			[source_img, target_img] = augment([source_img, target_img], self.size, self.edge_decay, self.only_h_flip)
@@ -120,6 +152,6 @@ class SingleLoader(Dataset):
 		img = read_img(os.path.join(self.root_dir, img_name)) * 2 - 1
 
 		# Apply AHE to the image
-		img = apply_ahe(img)
+		img = white_balance(img)
 
 		return {'img': hwc_to_chw(img), 'filename': img_name}
