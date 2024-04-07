@@ -33,6 +33,7 @@ def white_balance(image):
       A NumPy array representing the white balanced image.
   """
   # Convert the image to grayscale
+  img_dtype = image.dtype
   gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
   # Find the average intensity of the grayscale image (assuming white areas have high intensity)
@@ -50,7 +51,7 @@ def white_balance(image):
   balanced_image[:,:,2] *= scale  # Red channel
 
   # Clip the pixel values to be within the range [0, 255] and convert back to uint8
-  balanced_image = np.clip(balanced_image, 0, 255).astype(np.uint8)
+  balanced_image = np.clip(balanced_image, 0, 255).astype(img_dtype)
 
   return balanced_image
 
