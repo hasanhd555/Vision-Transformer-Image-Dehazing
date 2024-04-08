@@ -5,33 +5,68 @@ import cv2
 
 from torch.utils.data import Dataset
 from utils import hwc_to_chw, read_img
+import cv2
+import numpy as np
+
+def apply_clahe(img):
+    """
+    Apply CLAHE (Contrast Limited Adaptive Histogram Equalization) to the input image.
+
+    Args:
+        img: Input image as a NumPy array.
+
+    Returns:
+        Image with CLAHE applied.
+    """
+    # Scale pixel values to [0, 255] and convert to uint8
+    img = img * 255.0
+    img = img.astype(np.uint8)
+    
+    # Split image into channels
+    r, g, b = cv2.split(img)
+    
+    # Create a CLAHE object (Clip Limited Adaptive Histogram Equalization)
+    clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
+    
+    # Apply CLAHE to each channel separately
+    r_clahe = clahe.apply(r)
+    g_clahe = clahe.apply(g)
+    b_clahe = clahe.apply(b)
+    
+    # Merge the CLAHE enhanced channels
+    img_clahe = cv2.merge((r_clahe, g_clahe, b_clahe))
+
+    # Convert back to float32 and normalize to range [0, 1]
+    img_clahe = img_clahe.astype(np.float32) / 255.0
+    
+    return img_clahe
+
 def dehazing_preproc(image):
-  """
-  This function performs pre-processing on an image for dehazing tasks using OpenCV.
+    """
+    This function performs pre-processing on an image for dehazing tasks using OpenCV.
 
-  Args:
-      image: The input image as a NumPy array.
+    Args:
+        image: The input image as a NumPy array.
 
-  Returns:
-      A NumPy array representing the pre-processed image in its original data type.
-  """
-  # Convert to grayscale (optional, might be useful for some algorithms)
-  og_dtype = image.dtype
-  #image = image.astype(np.uint8)
+    Returns:
+        A NumPy array representing the pre-processed image in its original data type.
+    """
+    # Apply CLAHE for local contrast enhancement
+    image = apply_clahe(image)
 
-  
+    # Convert to grayscale
+    gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
-  # Apply CLAHE for local contrast enhancement (optional)
-  # clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-  # equalized_gray = clahe.apply(gray)
+    # Apply Gaussian filtering for denoising
+    blurred = cv2.GaussianBlur(gray_image, (5, 5), 0)
 
-  # Apply Gaussian filtering for denoising (adjust kernel size as needed)
-  blurred = cv2.GaussianBlur(image, (5, 5), 0)
+    # Convert the pre-processed grayscale back into a color image
+    blurred_color = cv2.cvtColor(blurred, cv2.COLOR_GRAY2BGR)
 
-  # Combine the pre-processed grayscale back into a color image (optional)
+    return blurred_color.astype(image.dtype)
 
-  # You can choose to return the grayscale or color pre-processed image based on your algorithm
-  return blurred.astype(og_dtype)  # Uncomment for color output
+# Example usage:
+# preprocessed_image = dehazing_preproc(input_image)
 
 
 
