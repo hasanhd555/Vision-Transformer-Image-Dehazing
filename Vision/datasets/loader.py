@@ -8,88 +8,140 @@ from utils import hwc_to_chw, read_img
 import cv2
 import numpy as np
 
-def apply_clahe(img):
+
+
+
+import numpy as np
+import cv2
+
+def dark_channel_prior(image, window_size=15):
     """
-    Apply CLAHE (Contrast Limited Adaptive Histogram Equalization) to the input image.
+    Compute the dark channel prior of an image.
 
     Args:
-        img: Input image as a NumPy array.
+    - image: Input hazy image.
+    - window_size: Size of the window for computing the dark channel.
 
     Returns:
-        Image with CLAHE applied.
+    - dark_channel: Dark channel prior of the input image.
     """
-    # Scale pixel values to [0, 255] and convert to uint8
-    img = img * 255.0
-    img = img.astype(np.uint8)
-    
-    # Split image into channels
-    r, g, b = cv2.split(img)
-    
-    # Create a CLAHE object (Clip Limited Adaptive Histogram Equalization)
-    clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
-    
-    # Apply CLAHE to each channel separately
-    r_clahe = clahe.apply(r)
-    g_clahe = clahe.apply(g)
-    b_clahe = clahe.apply(b)
-    
-    # Merge the CLAHE enhanced channels
-    img_clahe = cv2.merge((r_clahe, g_clahe, b_clahe))
+    # Compute the dark channel
+    dark_channel = np.min(image, axis=2)
+    dark_channel = cv2.erode(dark_channel, np.ones((window_size, window_size), dtype=np.uint8))
+    return dark_channel
 
-    # Convert back to float32 and normalize to range [0, 1]
-    img_clahe = img_clahe.astype(np.float32) / 255.0
-    
-    return img_clahe
-
-
-
-def simulate_polarized_image(gray_image, polarization_angle):
+def estimate_airlight_dcp(image, dark_channel, percentile=0.1):
     """
-    Simulates a polarized image based on the input grayscale image and polarization angle.
+    Estimate airlight using the Dark Channel Prior method.
 
     Args:
-        gray_image: The input grayscale image as a NumPy array.
-        polarization_angle: The polarization angle in degrees.
+    - image: Input hazy image.
+    - dark_channel: Dark channel prior of the input image.
+    - percentile: Percentage of brightest pixels to consider for airlight estimation.
 
     Returns:
-        A simulated polarized image as a NumPy array.
+    - airlight: Estimated airlight value.
     """
-    # Convert polarization angle to radians
-    polarization_angle_rad = np.radians(polarization_angle)
+    # Flatten the dark channel to find the brightest pixels
+    dark_channel_flat = dark_channel.flatten()
+    
+    # Sort the dark channel values in descending order
+    sorted_indices = np.argsort(-dark_channel_flat)
+    
+    # Calculate the number of pixels to consider based on the given percentile
+    num_pixels = int(percentile * len(sorted_indices))
+    
+    # Select the brightest pixels and compute the average color
+    brightest_pixels = image.reshape(-1, 3)[sorted_indices[:num_pixels]]
+    airlight = np.mean(brightest_pixels, axis=0)
+    
+    return airlight
 
-    # Simulate polarized image using polarization angle
-    polarized_img = np.cos(gray_image + polarization_angle_rad)
+import cv2
+import numpy as np
+from sklearn.cluster import KMeans
+from scipy.ndimage import gaussian_filter
 
-    return polarized_img
+def load_image(image_path):
+    # Load image and convert to RGB color space
+    img = cv2.imread(image_path)
+    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    return img
 
-def dehaze_using_polarization(polarized_images):
+def convert_to_spherical(image):
+    # Convert image to spherical coordinates
+    r = np.linalg.norm(image, axis=2)
+    phi = np.arctan2(image[:,:,1], image[:,:,0])
+    theta = np.arccos(image[:,:,2] / (r + 1e-10))  # Add a small epsilon to avoid division by zero
+    return r, phi, theta
+
+def kmeans_clustering(spherical_coords, n_clusters=3):
+    # Flatten the spherical coordinates
+    pixels = np.column_stack((spherical_coords[1].flatten(), spherical_coords[2].flatten()))
+    # Perform K-means clustering
+    kmeans = KMeans(n_clusters=n_clusters)
+    kmeans.fit(pixels)
+    # Get cluster labels
+    cluster_labels = kmeans.labels_
+    return cluster_labels.reshape(spherical_coords[0].shape)
+
+def estimate_max_radius(cluster_labels, r):
+    # Estimate maximum radius for each cluster
+    max_radius = np.zeros(np.max(cluster_labels) + 1)
+    for i in range(len(max_radius)):
+        max_radius[i] = np.max(r[cluster_labels == i])
+    return max_radius
+
+def estimate_transmission(r, max_radius, cluster_labels):
+    # Estimate transmission for each pixel
+    transmission_estimated = np.zeros_like(r)
+    for i in range(len(max_radius)):
+        transmission_estimated[cluster_labels == i] = r[cluster_labels == i] / max_radius[i]
+    return transmission_estimated
+
+def regularize_transmission(transmission, image, sigma=0.1, lam=0.1):
+    # Regularize transmission
+    regularized_transmission = np.zeros_like(transmission)
+    for x in range(image.shape[0]):
+        for y in range(image.shape[1]):
+            neighborhood = image[max(0, x-1):min(x+2, image.shape[0]), max(0, y-1):min(y+2, image.shape[1])]
+            t_diff = transmission[x, y] - transmission[neighborhood[:,:,0], neighborhood[:,:,1]]
+            i_diff = np.linalg.norm(image[x, y] - image[neighborhood[:,:,0], neighborhood[:,:,1]], axis=2)
+            regularization_term = np.sum(t_diff**2 / (2 * sigma**2) + lam * t_diff * i_diff)
+            regularized_transmission[x, y] = transmission[x, y] - regularization_term
+    return regularized_transmission
+
+def dehaze_image(image, transmission, airlight):
+    # Dehaze the image
+    dehazed_image = np.zeros_like(image)
+    for i in range(3):
+        dehazed_image[:,:,i] = ((image[:,:,i] - airlight[i]) / np.maximum(transmission, 0.1)) + airlight[i]
+    return np.clip(dehazed_image, 0, 255).astype(np.uint8)
+
+
+def post_proc(image):
     """
-    Performs dehazing using polarized images and the Haze-Line Model.
+    Perform color correction on the input image using histogram equalization.
 
     Args:
-        polarized_images: A list of polarized images as NumPy arrays.
+    - image: Input image (hazy or dehazed).
 
     Returns:
-        A dehazed image as a NumPy array.
+    - corrected_image: Color-corrected image.
     """
-    # Combine polarized images using simple averaging
-    combined_image = np.mean(polarized_images, axis=0)
+    # Convert the image to LAB color space
+    lab_image = cv2.cvtColor(image, cv2.COLOR_RGB2LAB)
+    
+    # Apply histogram equalization to the L channel
+    lab_image[:,:,0] = cv2.equalizeHist(lab_image[:,:,0])
+    
+    # Convert the LAB image back to RGB color space
+    corrected_image = cv2.cvtColor(lab_image, cv2.COLOR_LAB2RGB)
+    
+    return corrected_image
 
-    # Estimate atmospheric light using the brightest pixel
-    atmospheric_light = np.max(combined_image)
 
-    # Estimate transmission map using Haze-Line Model
-    transmission_map = 1 - (combined_image / atmospheric_light)
 
-    # Remove haze using transmission map
-    dehazed_image = np.zeros_like(combined_image)
-    for i in range(3):  # Process each channel separately
-        dehazed_image[:, :, i] = (combined_image[:, :, i] - atmospheric_light) / transmission_map[:, :, i] + atmospheric_light
-
-    # Clip values to ensure they are within valid range
-    #dehazed_image = np.clip(dehazed_image, 0, 255).astype(np.uint8)
-
-    return dehazed_image
 
 
 
@@ -104,101 +156,41 @@ def dehazing_preproc(image):
     Returns:
        A NumPy array representing the dehazed image in its original data type.
     """
+    hazy_image = image
+    airlight = np.array([255, 255, 255])  # Sample airlight value, should be estimated
+    IA = hazy_image - airlight
 
-    # Apply any necessary preprocessing steps (e.g., CLAHE, grayscale conversion)
-    #image = apply_clahe(image)
-    #gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+# Convert IA to spherical coordinates
+    r, phi, theta = convert_to_spherical(IA)
 
-    # Simulate polarized images (assuming a single input image):
-    num_polarizations = 3  # Adjust as needed
-    polarized_images = []
-    for i in range(num_polarizations):
-        polarized_img = simulate_polarized_image(image, polarization_angle=(i + 1) * 60)
-        polarized_images.append(polarized_img)
+# Cluster pixels according to [phi(x), theta(x)]
+    cluster_labels = kmeans_clustering((r, phi, theta))
 
-    # Apply polarization-based dehazing:
-    dehazed_image = dehaze_using_polarization(polarized_images)
+# Estimate maximum radius for each cluster
+    max_radius = estimate_max_radius(cluster_labels, r)
 
-    # Convert back to color if needed:
-    #if len(image.shape) == 3:
-        #dehazed_image = cv2.cvtColor(dehazed_image, cv2.COLOR_GRAY2BGR)
+# Estimate transmission
+    transmission_estimated = estimate_transmission(r, max_radius, cluster_labels)
 
-    return dehazed_image.astype(image.dtype)
+# Regularize transmission
+    regularized_transmission = gaussian_filter(transmission_estimated, sigma=0.1)
+
+# Dehaze the image
+    dark_channel = dark_channel_prior(hazy_image)
+
+# Estimate airlight using DCP
+    airlight_dcp = estimate_airlight_dcp(hazy_image, dark_channel)
+    dehazed_image = dehaze_image(hazy_image, regularized_transmission, airlight_dcp)
+    dehazed_image = post_proc(dehazed_image)
+    
+
+    return dehazed_image
 
 
 # Example usage:
 # preprocessed_image = dehazing_preproc(input_image)
-import cv2
-import numpy as np
-from sklearn.cluster import KMeans
-
-def non_local_image_dehazing(image):
-    # Convert the image to the RGB color space
-    image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-
-    # Cluster the pixels of the haze-free image into distinct colors
-    kmeans = KMeans(n_clusters=256, random_state=0).fit(image_rgb.reshape(-1, 3))
-    labels = kmeans.labels_
-    centroids = kmeans.cluster_centers_
-
-    # Identify the haze-lines in RGB space
-    haze_lines = []
-    for i in range(256):
-        pixels = image_rgb[labels == i]
-        if pixels.shape[0] > 10:
-            haze_line = np.polyfit(pixels[:, 2], pixels[:, :2], 1)
-            haze_lines.append(haze_line)
-
-    # Estimate the per-pixel transmission
-    transmission = np.zeros(image_rgb.shape[:2])
-    for i in range(256):
-        pixels = image_rgb[labels == i]
-        if pixels.shape[0] > 10:
-            for j in range(pixels.shape[0]):
-                x = pixels[j, 2]
-                y = np.polyval(haze_lines[i], x)
-                transmission[pixels[j, :2]] = np.linalg.norm(pixels[j, :2] - y)
-
-    # Recover the distance map and the haze-free image
-    distance_map = transmission / np.max(transmission)
-    haze_free_image = (image_rgb.astype(np.float32) - transmission.reshape(image_rgb.shape[:2] + (1,)) * A) / (1 - transmission)
-
-    return haze_free_image, distance_map
 
 
-
-def white_balance(image):
-  """
-  This function performs white balance adjustment on an image using OpenCV.
-
-  Args:
-      image: The input image as a NumPy array.
-
-  Returns:
-      A NumPy array representing the white balanced image.
-  """
-  # Convert the image to grayscale
-  img_dtype = image.dtype
-  gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-
-  # Find the average intensity of the grayscale image (assuming white areas have high intensity)
-  avg_intensity = np.mean(gray)
-
-  # Calculate a scaling factor to adjust the intensity of all color channels
-  scale = 255.0 / avg_intensity
-
-  # Create a new image for the white balanced output
-  balanced_image = image.astype(np.float32)  # Convert to float32 for scaling
-
-  # Multiply each color channel by the scaling factor
-  balanced_image[:,:,0] *= scale  # Blue channel
-  balanced_image[:,:,1] *= scale  # Green channel
-  balanced_image[:,:,2] *= scale  # Red channel
-
-  # Clip the pixel values to be within the range [0, 255] and convert back to uint8
-  balanced_image = np.clip(balanced_image, 0, 255).astype(img_dtype)
-
-  return balanced_image
 
 def augment(imgs=[], size=256, edge_decay=0., only_h_flip=False):
 	H, W, _ = imgs[0].shape
@@ -270,7 +262,7 @@ class PairLoader(Dataset):
 		target_img = read_img(os.path.join(self.root_dir, 'GT', img_name)) * 2 - 1
 
 		# Apply AHE to source and target images
-		source_img = non_local_image_dehazing(source_img)
+		source_img =dehazing_preproc(source_img)
 		
 		if self.mode == 'train':
 			[source_img, target_img] = augment([source_img, target_img], self.size, self.edge_decay, self.only_h_flip)
@@ -298,6 +290,12 @@ class SingleLoader(Dataset):
 		img = read_img(os.path.join(self.root_dir, img_name)) * 2 - 1
 
 		# Apply AHE to the image
-		img = non_local_image_dehazing(img)
+		img = dehazing_preproc(img)
 
 		return {'img': hwc_to_chw(img), 'filename': img_name}
+	
+
+
+    
+	
+
