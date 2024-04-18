@@ -262,7 +262,7 @@ class PairLoader(Dataset):
 		target_img = read_img(os.path.join(self.root_dir, 'GT', img_name)) * 2 - 1
 
 		# Apply AHE to source and target images
-		source_img =dehazing_preproc(source_img)
+		source_img =source_img
 		
 		if self.mode == 'train':
 			[source_img, target_img] = augment([source_img, target_img], self.size, self.edge_decay, self.only_h_flip)
@@ -290,7 +290,7 @@ class SingleLoader(Dataset):
 		img = read_img(os.path.join(self.root_dir, img_name)) * 2 - 1
 
 		# Apply AHE to the image
-		img = dehazing_preproc(img)
+		img = img
 
 		return {'img': hwc_to_chw(img), 'filename': img_name}
 	

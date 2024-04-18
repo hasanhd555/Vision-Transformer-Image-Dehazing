@@ -41,6 +41,49 @@ class RLN(nn.Module):
 		return out, rescale, rebias
 
 
+class RGN(nn.Module):
+    r"""Revised GroupNorm"""
+    def __init__(self, num_groups=32, num_channels, eps=1e-5, detach_grad=False):
+        super(RGN, self).__init__()
+        self.eps = eps
+        self.detach_grad = detach_grad
+        self.num_groups = num_groups
+
+        self.weight = nn.Parameter(torch.ones(1, num_channels, 1, 1))
+        self.bias = nn.Parameter(torch.zeros(1, num_channels, 1, 1))
+
+        self.meta1 = nn.Conv2d(1, num_channels // num_groups, 1)
+        self.meta2 = nn.Conv2d(1, num_channels // num_groups, 1)
+
+        trunc_normal_(self.meta1.weight, std=.02)
+        nn.init.constant_(self.meta1.bias, 1)
+
+        trunc_normal_(self.meta2.weight, std=.02)
+        nn.init.constant_(self.meta2.bias, 0)
+
+    def forward(self, input):
+        N, C, H, W = input.shape
+        G = self.num_groups
+        input = input.view(N, G, C // G, H, W)
+
+        mean = input.mean(dim=(2, 3, 4), keepdim=True)
+        std = input.var(dim=(2, 3, 4), keepdim=True).add_(self.eps).sqrt()
+
+        input = input.view(N, C, H, W)
+        normalized_input = (input - mean.view(N, C, 1, 1)) / std.view(N, C, 1, 1)
+
+        if self.detach_grad:
+            rescale, rebias = self.meta1(std.view(N, 1, G, 1).detach()), self.meta2(mean.view(N, 1, G, 1).detach())
+        else:
+            rescale, rebias = self.meta1(std.view(N, 1, G, 1)), self.meta2(mean.view(N, 1, G, 1))
+
+        rescale = rescale.view(N, C, 1, 1)
+        rebias = rebias.view(N, C, 1, 1)
+
+        out = normalized_input * self.weight + self.bias
+        return out, rescale, rebias
+
+
 class Mlp(nn.Module):
 	def __init__(self, network_depth, in_features, hidden_features=None, out_features=None):
 		super().__init__()
@@ -384,7 +427,7 @@ class DehazeFormer(nn.Module):
 				 num_heads=[2, 4, 6, 1, 1],
 				 attn_ratio=[1/4, 1/2, 3/4, 0, 0],
 				 conv_type=['DWConv', 'DWConv', 'DWConv', 'DWConv', 'DWConv'],
-				 norm_layer=[RLN, RLN, RLN, RLN, RLN]):
+				 norm_layer=[RGN, RGN, RGN, RGN, RGN]):
 		super(DehazeFormer, self).__init__()
 
 		# setting
@@ -399,7 +442,7 @@ class DehazeFormer(nn.Module):
 		# backbone
 		self.layer1 = BasicLayer(network_depth=sum(depths), dim=embed_dims[0], depth=depths[0],
 					   			 num_heads=num_heads[0], mlp_ratio=mlp_ratios[0],
-					   			 norm_layer=norm_layer[0], window_size=window_size,
+					   			 norm_layer=RGN(num_channels=embed_dims[0]), window_size=window_size,
 					   			 attn_ratio=attn_ratio[0], attn_loc='last', conv_type=conv_type[0])
 
 		self.patch_merge1 = PatchEmbed(
@@ -409,7 +452,7 @@ class DehazeFormer(nn.Module):
 
 		self.layer2 = BasicLayer(network_depth=sum(depths), dim=embed_dims[1], depth=depths[1],
 								 num_heads=num_heads[1], mlp_ratio=mlp_ratios[1],
-								 norm_layer=norm_layer[1], window_size=window_size,
+								 norm_layer=RGN(num_channels=embed_dims[1]), window_size=window_size,
 								 attn_ratio=attn_ratio[1], attn_loc='last', conv_type=conv_type[1])
 
 		self.patch_merge2 = PatchEmbed(
@@ -419,7 +462,7 @@ class DehazeFormer(nn.Module):
 
 		self.layer3 = BasicLayer(network_depth=sum(depths), dim=embed_dims[2], depth=depths[2],
 								 num_heads=num_heads[2], mlp_ratio=mlp_ratios[2],
-								 norm_layer=norm_layer[2], window_size=window_size,
+								 norm_layer=RGN(num_channels=embed_dims[2]), window_size=window_size,
 								 attn_ratio=attn_ratio[2], attn_loc='last', conv_type=conv_type[2])
 
 		self.patch_split1 = PatchUnEmbed(
@@ -430,7 +473,7 @@ class DehazeFormer(nn.Module):
 
 		self.layer4 = BasicLayer(network_depth=sum(depths), dim=embed_dims[3], depth=depths[3],
 								 num_heads=num_heads[3], mlp_ratio=mlp_ratios[3],
-								 norm_layer=norm_layer[3], window_size=window_size,
+								 norm_layer=RGN(num_channels=embed_dims[3]), window_size=window_size,
 								 attn_ratio=attn_ratio[3], attn_loc='last', conv_type=conv_type[3])
 
 		self.patch_split2 = PatchUnEmbed(
@@ -441,7 +484,7 @@ class DehazeFormer(nn.Module):
 
 		self.layer5 = BasicLayer(network_depth=sum(depths), dim=embed_dims[4], depth=depths[4],
 					   			 num_heads=num_heads[4], mlp_ratio=mlp_ratios[4],
-					   			 norm_layer=norm_layer[4], window_size=window_size,
+					   			 norm_layer=RGN(num_channels=embed_dims[4]), window_size=window_size,
 					   			 attn_ratio=attn_ratio[4], attn_loc='last', conv_type=conv_type[4])
 
 		# merge non-overlapping patches into image
