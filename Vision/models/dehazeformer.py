@@ -43,7 +43,7 @@ class RLN(nn.Module):
 
 class RGN(nn.Module):
     r"""Revised GroupNorm"""
-    def __init__(self, num_groups=32, num_channels, eps=1e-5, detach_grad=False):
+    def __init__(self,num_channels , num_groups=12, eps=1e-5, detach_grad=False):
         super(RGN, self).__init__()
         self.eps = eps
         self.detach_grad = detach_grad
