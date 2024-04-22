@@ -156,7 +156,7 @@ if __name__ == '__main__':
 				
 				writer.add_scalar('valid_psnr', avg_psnr, epoch)
 
-				if avg_psnr > best_psnr:
+				if avg_psnr >= best_psnr:
 					best_psnr = avg_psnr
 					torch.save({'state_dict': network.state_dict()},
                 			   os.path.join(save_dir, args.model+'.pth'))
