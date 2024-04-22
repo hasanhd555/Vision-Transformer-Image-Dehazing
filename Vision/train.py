@@ -29,7 +29,7 @@ args = parser.parse_args()
 os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
 
 class CustomLoss(nn.Module):
-    def __init__(self, criterion, soft_prior_weight=0.1):
+    def __init__(self, criterion, soft_prior_weight=0.01):
         super(CustomLoss, self).__init__()
         self.criterion = criterion
         self.soft_prior_weight = soft_prior_weight
