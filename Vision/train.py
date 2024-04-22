@@ -28,6 +28,18 @@ args = parser.parse_args()
 
 os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
 
+class CustomLoss(nn.Module):
+    def __init__(self, criterion, soft_prior_weight=0.1):
+        super(CustomLoss, self).__init__()
+        self.criterion = criterion
+        self.soft_prior_weight = soft_prior_weight
+
+    def forward(self, output, target, soft_prior_score):
+        l1_loss = self.criterion(output, target)
+        soft_prior_loss = torch.mean(soft_prior_score)
+        total_loss = l1_loss + self.soft_prior_weight * soft_prior_loss
+        return total_loss
+
 
 def train(train_loader, network, criterion, optimizer, scaler):
 	losses = AverageMeter()
@@ -41,8 +53,8 @@ def train(train_loader, network, criterion, optimizer, scaler):
 		target_img = batch['target'].cuda()
 
 		with autocast(args.no_autocast):
-			output = network(source_img)
-			loss = criterion(output, target_img)
+			output,soft_prior_score = network(source_img)
+			loss = criterion(output, target_img,soft_prior_score)
 
 		losses.update(loss.item())
 
@@ -66,7 +78,7 @@ def valid(val_loader, network):
 		target_img = batch['target'].cuda()
 
 		with torch.no_grad():							# torch.no_grad() may cause warning
-			output = network(source_img).clamp_(-1, 1)		
+			output,soft_prior_score= network(source_img).clamp_(-1, 1)		
 
 		mse_loss = F.mse_loss(output * 0.5 + 0.5, target_img * 0.5 + 0.5, reduction='none').mean((1, 2, 3))
 		psnr = 10 * torch.log10(1 / mse_loss).mean()
@@ -85,7 +97,7 @@ if __name__ == '__main__':
 	network = eval(args.model.replace('-', '_'))()
 	network = nn.DataParallel(network).cuda()
 
-	criterion = nn.L1Loss()
+	criterion = CustomLoss(nn.L1Loss())
 
 	if setting['optimizer'] == 'adam':
 		optimizer = torch.optim.Adam(network.parameters(), lr=setting['lr'])

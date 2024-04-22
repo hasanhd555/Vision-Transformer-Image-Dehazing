@@ -52,7 +52,7 @@ def test(test_loader, network, result_dir):
 		filename = batch['filename'][0]
 
 		with torch.no_grad():
-			output = network(input).clamp_(-1, 1)
+			output,soft_prior_score = network(input).clamp_(-1, 1)
 
 			# [-1, 1] to [0, 1]
 			output = output * 0.5 + 0.5
