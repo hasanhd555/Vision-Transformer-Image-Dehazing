@@ -387,7 +387,7 @@ class SoftPriorNet(nn.Module):
         self.conv2 = nn.Conv2d(32, 64, kernel_size=3, padding=1)
         self.relu2 = nn.ReLU(inplace=True)
         # Output layer with two neurons
-        self.fc = nn.Linear(64 , 2)  # 2 for data fidelity and soft prior scores
+        self.fc = nn.Linear(4194304 , 2)  # 2 for data fidelity and soft prior scores
 
     def forward(self, x):
         x = self.relu1(self.conv1(x))
