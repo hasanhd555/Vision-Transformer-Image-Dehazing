@@ -93,6 +93,7 @@ def valid(val_loader, network):
 		psnr = 10 * torch.log10(1 / mse_loss).mean()
 		PSNR.update(psnr.item(), source_img.size(0))
 
+
 	return PSNR.avg
 
 
@@ -146,6 +147,7 @@ if __name__ == '__main__':
 		best_psnr = 0
 		for epoch in tqdm(range(setting['epochs'] + 1)):
 			loss = train(train_loader, network, criterion, optimizer, scaler)
+			print('Epoch: %d, Loss: %.4f' % (epoch, loss))
 
 			writer.add_scalar('train_loss', loss, epoch)
 
@@ -153,6 +155,7 @@ if __name__ == '__main__':
 
 			if epoch % setting['eval_freq'] == 0:
 				avg_psnr = valid(val_loader, network)
+				print('Epoch: %d, PSNR: %.2f' % (epoch, avg_psnr))
 				
 				writer.add_scalar('valid_psnr', avg_psnr, epoch)
 
