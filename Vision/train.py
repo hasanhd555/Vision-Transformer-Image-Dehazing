@@ -78,7 +78,7 @@ def valid(val_loader, network):
 		target_img = batch['target'].cuda()
 
 		with torch.no_grad():							# torch.no_grad() may cause warning
-			output,soft_prior_score= network(source_img).clamp_(-1, 1)		
+			output= network(source_img)[0].clamp_(-1, 1)		
 
 		mse_loss = F.mse_loss(output * 0.5 + 0.5, target_img * 0.5 + 0.5, reduction='none').mean((1, 2, 3))
 		psnr = 10 * torch.log10(1 / mse_loss).mean()
