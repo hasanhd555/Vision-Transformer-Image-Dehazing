@@ -224,6 +224,32 @@ def augment(imgs=[], size=256, edge_decay=0., only_h_flip=False):
 	return imgs
 
 
+def apply_clahe(img):
+
+    # img = img * 255.0
+    # img = img.astype(np.uint8)
+    image_8bit = cv2.normalize(img, None, alpha=0, beta=255, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_8U)
+
+    img_LAB = cv2.cvtColor(image_8bit, cv2.COLOR_BGR2Lab)
+
+    l, a, b = cv2.split(img_LAB)
+    
+    # Create a CLAHE object (Clip Limited Adaptive Histogram Equalization)
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    
+    # Apply CLAHE to each channel separately
+    l_clahe = clahe.apply(l)
+    
+    # Merge the CLAHE enhanced channels
+    img_clahe = cv2.merge((l_clahe, a, b))
+
+    img_clahe = cv2.cvtColor(img_clahe, cv2.COLOR_Lab2BGR)
+
+    img_clahe = img_clahe.astype(np.float32) / 255.0
+    
+    return img_clahe
+
+
 def align(imgs=[], size=256):
 	H, W, _ = imgs[0].shape
 	Hc, Wc = [size, size]
@@ -262,7 +288,7 @@ class PairLoader(Dataset):
 		target_img = read_img(os.path.join(self.root_dir, 'GT', img_name)) * 2 - 1
 
 		# Apply AHE to source and target images
-		source_img =source_img
+		source_img =apply_clahe(source_img)
 		
 		if self.mode == 'train':
 			[source_img, target_img] = augment([source_img, target_img], self.size, self.edge_decay, self.only_h_flip)
@@ -290,7 +316,7 @@ class SingleLoader(Dataset):
 		img = read_img(os.path.join(self.root_dir, img_name)) * 2 - 1
 
 		# Apply AHE to the image
-		img = img
+		img = apply_clahe(img)
 
 		return {'img': hwc_to_chw(img), 'filename': img_name}
 	
