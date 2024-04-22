@@ -36,9 +36,18 @@ class CustomLoss(nn.Module):
 
     def forward(self, output, target, soft_prior_score):
         l1_loss = self.criterion(output, target)
+        
+        # Normalize soft_prior_score
+        soft_prior_score = torch.softmax(soft_prior_score, dim=1)
+        
+        # Regularize soft_prior_score
+        soft_prior_score = torch.clamp(soft_prior_score, min=0.1, max=0.9)
+        
         soft_prior_loss = torch.mean(soft_prior_score)
+        
         total_loss = l1_loss + self.soft_prior_weight * soft_prior_loss
         return total_loss
+
 
 
 def train(train_loader, network, criterion, optimizer, scaler):
