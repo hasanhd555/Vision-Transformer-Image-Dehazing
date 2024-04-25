@@ -28,27 +28,6 @@ args = parser.parse_args()
 
 os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
 
-class CustomLoss(nn.Module):
-    def __init__(self, criterion, soft_prior_weight=0):
-        super(CustomLoss, self).__init__()
-        self.criterion = criterion
-        self.soft_prior_weight = soft_prior_weight
-
-    def forward(self, output, target, soft_prior_score):
-        l1_loss = self.criterion(output, target)
-        
-        # Normalize soft_prior_score
-        soft_prior_score = torch.softmax(soft_prior_score, dim=1)
-        
-        # Regularize soft_prior_score
-        soft_prior_score = torch.clamp(soft_prior_score, min=0.1, max=0.9)
-        
-        soft_prior_loss = torch.mean(soft_prior_score)
-        
-        total_loss = l1_loss + self.soft_prior_weight * soft_prior_loss
-        return total_loss
-
-
 
 def train(train_loader, network, criterion, optimizer, scaler):
 	losses = AverageMeter()
@@ -62,8 +41,8 @@ def train(train_loader, network, criterion, optimizer, scaler):
 		target_img = batch['target'].cuda()
 
 		with autocast(args.no_autocast):
-			output,soft_prior_score = network(source_img)
-			loss = criterion(output, target_img,soft_prior_score)
+			output= network(source_img)
+			loss = criterion(output, target_img)
 
 		losses.update(loss.item())
 
@@ -107,7 +86,7 @@ if __name__ == '__main__':
 	network = eval(args.model.replace('-', '_'))()
 	network = nn.DataParallel(network).cuda()
 
-	criterion = CustomLoss(nn.L1Loss())
+	criterion = nn.L1Loss()
 
 	if setting['optimizer'] == 'adam':
 		optimizer = torch.optim.Adam(network.parameters(), lr=setting['lr'])

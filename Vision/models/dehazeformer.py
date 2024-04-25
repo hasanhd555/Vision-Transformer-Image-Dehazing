@@ -378,22 +378,7 @@ class SKFusion(nn.Module):
 		return out     
 
 
-class SoftPriorNet(nn.Module):
-    def __init__(self, in_channels):
-        super(SoftPriorNet, self).__init__()
-        # Define the network architecture
-        self.conv1 = nn.Conv2d(in_channels, 32, kernel_size=3, padding=1)
-        self.relu1 = nn.ReLU(inplace=True)
-        self.conv2 = nn.Conv2d(32, 64, kernel_size=3, padding=1)
-        self.relu2 = nn.ReLU(inplace=True)
-        # Output layer with two neurons
-        self.fc = nn.Linear(4194304 , 2)  # 2 for data fidelity and soft prior scores
 
-    def forward(self, x):
-        x = self.relu1(self.conv1(x))
-        x = self.relu2(self.conv2(x))
-        x = x.view(x.size(0), -1)  # Flatten for fully-connected layer
-        return self.fc(x)  # Output data fidelity and soft prior scores
  
 
 
@@ -469,7 +454,7 @@ class DehazeFormer(nn.Module):
 		self.patch_unembed = PatchUnEmbed(
 			patch_size=1, out_chans=out_chans, embed_dim=embed_dims[4], kernel_size=3)
 		
-		self.soft_prior_net = SoftPriorNet(out_chans)
+		
 
 
 	def check_image_size(self, x):
@@ -508,11 +493,11 @@ class DehazeFormer(nn.Module):
 
 		feat = self.forward_features(x)
 		K, B = torch.split(feat, (1, 3), dim=1)
-		soft_prior_scores = self.soft_prior_net(feat)
+		
 
 		x = K * x - B + x
 		x = x[:, :, :H, :W]
-		return x,soft_prior_scores
+		return x
 
 
 def dehazeformer_t():
