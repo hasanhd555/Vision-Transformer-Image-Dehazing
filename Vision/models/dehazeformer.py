@@ -492,6 +492,7 @@ class ProximalDehazeNet(nn.Module):
         self.gif_block = GIFBlock()
 
     def forward(self, hazy_image):
+        print("shape: ",hazy_image.shape)
         batch_size, _, height, width = hazy_image.shape
         U = torch.zeros(batch_size, 1, height, width, device=hazy_image.device)
         T = torch.ones(batch_size, 1, height, width, device=hazy_image.device)
