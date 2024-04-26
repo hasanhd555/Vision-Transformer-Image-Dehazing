@@ -41,6 +41,8 @@ class CombinedLoss(nn.Module):
 		#convert to float
         y_pred = y_pred.float()
         y_true = y_true.float()
+        y_pred=y_pred * 0.5 + 0.5
+        y_true=y_true * 0.5 + 0.5
         mse = self.mse_loss(y_pred, y_true)
         # Ensure the input is in the range [0, max_val] for SSIM calculation
         y_pred = torch.clamp(y_pred, 0, self.max_val)
@@ -109,7 +111,7 @@ if __name__ == '__main__':
 	network = eval(args.model.replace('-', '_'))()
 	network = nn.DataParallel(network).cuda()
 
-	criterion = nn.L1Loss()
+	criterion = CombinedLoss()
 
 	if setting['optimizer'] == 'adam':
 		optimizer = torch.optim.Adam(network.parameters(), lr=setting['lr'])
