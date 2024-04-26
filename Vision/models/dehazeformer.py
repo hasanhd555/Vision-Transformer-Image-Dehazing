@@ -427,7 +427,7 @@ class TNet(nn.Module):
     """Transmission prior learning network"""
     def __init__(self):
         super(TNet, self).__init__()
-        self.conv1 = nn.Conv2d(in_channels=5, out_channels=9, kernel_size=7, padding=3)
+        self.conv1 = nn.Conv2d(in_channels=8, out_channels=9, kernel_size=7, padding=3)
         self.relu1 = nn.ReLU()
         self.pool1 = nn.MaxPool2d(kernel_size=2, stride=2)
         self.upsample1 = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
@@ -496,7 +496,7 @@ class ProximalDehazeNet(nn.Module):
         batch_size, _, height, width = hazy_image.shape
 
         U = torch.zeros(batch_size, 1, height, width, device=hazy_image.device)
-        T = torch.ones(batch_size, 1, height, width, device=hazy_image.device)
+        T = torch.ones(batch_size, 4, height, width, device=hazy_image.device)
         Q = hazy_image.clone()
 
         for _ in range(self.num_stages):
