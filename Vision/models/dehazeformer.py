@@ -492,23 +492,23 @@ class ProximalDehazeNet(nn.Module):
         self.gif_block = GIFBlock()
 
     def forward(self, hazy_image):
-        print("shape: ",hazy_image.shape)
+       
         batch_size, _, height, width = hazy_image.shape
-        print("batch_size: ",batch_size)
-        print("height: ",height)
-        print("width: ",width)
+
         U = torch.zeros(batch_size, 1, height, width, device=hazy_image.device)
         T = torch.ones(batch_size, 1, height, width, device=hazy_image.device)
         Q = hazy_image.clone()
 
         for _ in range(self.num_stages):
+            print("U shape: ",U.shape)
+            print("T shape: ",T.shape)
             U_hat = torch.cat([U, hazy_image], dim=1)
             U = self.dnet(U_hat)
 
             T_hat = torch.cat([T, hazy_image], dim=1)
             T = self.tnet(T_hat)
             T = self.gif_block(T, hazy_image)
-
+			
             Q = (hazy_image - (1 - T)) / T
 
         return Q
@@ -620,7 +620,7 @@ class DehazeFormer(nn.Module):
 		x = self.fusion2([x, self.skip1(skip1)]) + x
 		x = self.layer5(x)
 		x = self.patch_unembed(x)
-		#x = self.prox(x)
+		x = self.prox(x)
 		print("x shape: ",x.shape)
 		return x
 
