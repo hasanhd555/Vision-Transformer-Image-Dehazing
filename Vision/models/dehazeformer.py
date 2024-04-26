@@ -500,8 +500,8 @@ class ProximalDehazeNet(nn.Module):
         Q = hazy_image.clone()
 
         for _ in range(self.num_stages):
-            print("U shape: ",U.shape)
-            print("T shape: ",T.shape)
+           # print("U shape: ",U.shape)
+            #print("T shape: ",T.shape)
             U_hat = torch.cat([U, hazy_image], dim=1)
             U = self.dnet(U_hat)
 
@@ -621,7 +621,7 @@ class DehazeFormer(nn.Module):
 		x = self.layer5(x)
 		x = self.patch_unembed(x)
 		x = self.prox(x)
-		print("x shape: ",x.shape)
+		#print("x shape: ",x.shape)
 		return x
 
 	def forward(self, x):
