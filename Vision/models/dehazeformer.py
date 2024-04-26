@@ -427,7 +427,7 @@ class TNet(nn.Module):
     """Transmission prior learning network"""
     def __init__(self):
         super(TNet, self).__init__()
-        self.conv1 = nn.Conv2d(in_channels=4, out_channels=9, kernel_size=7, padding=3)
+        self.conv1 = nn.Conv2d(in_channels=5, out_channels=9, kernel_size=7, padding=3)
         self.relu1 = nn.ReLU()
         self.pool1 = nn.MaxPool2d(kernel_size=2, stride=2)
         self.upsample1 = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
