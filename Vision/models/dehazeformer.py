@@ -494,6 +494,9 @@ class ProximalDehazeNet(nn.Module):
     def forward(self, hazy_image):
         print("shape: ",hazy_image.shape)
         batch_size, _, height, width = hazy_image.shape
+        print("batch_size: ",batch_size)
+        print("height: ",height)
+        print("width: ",width)
         U = torch.zeros(batch_size, 1, height, width, device=hazy_image.device)
         T = torch.ones(batch_size, 1, height, width, device=hazy_image.device)
         Q = hazy_image.clone()
