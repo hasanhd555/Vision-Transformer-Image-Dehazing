@@ -38,6 +38,9 @@ class CombinedLoss(nn.Module):
         self.max_val = max_val
 
     def forward(self, y_pred, y_true):
+		#convert to float
+        y_pred = y_pred.float()
+        y_true = y_true.float()
         mse = self.mse_loss(y_pred, y_true)
         # Ensure the input is in the range [0, max_val] for SSIM calculation
         y_pred = torch.clamp(y_pred, 0, self.max_val)
