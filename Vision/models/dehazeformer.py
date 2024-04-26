@@ -620,7 +620,8 @@ class DehazeFormer(nn.Module):
 		x = self.fusion2([x, self.skip1(skip1)]) + x
 		x = self.layer5(x)
 		x = self.patch_unembed(x)
-		x = self.prox(x)
+		#x = self.prox(x)
+		print("x shape: ",x.shape)
 		return x
 
 	def forward(self, x):
