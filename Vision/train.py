@@ -12,6 +12,7 @@ from tqdm import tqdm
 from utils import AverageMeter
 from datasets.loader import PairLoader
 from models import *
+from pytorch_msssim import ssim
 
 
 parser = argparse.ArgumentParser()
@@ -27,6 +28,25 @@ parser.add_argument('--gpu', default='0,1,2,3', type=str, help='GPUs used for tr
 args = parser.parse_args()
 
 os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu
+
+class CombinedLoss(nn.Module):
+    def __init__(self, alpha=0.84, beta=0.16, max_val=1.0):
+        super(CombinedLoss, self).__init__()
+        self.alpha = alpha
+        self.beta = beta
+        self.mse_loss = nn.MSELoss()
+        self.max_val = max_val
+
+    def forward(self, y_pred, y_true):
+        mse = self.mse_loss(y_pred, y_true)
+        # Ensure the input is in the range [0, max_val] for SSIM calculation
+        y_pred = torch.clamp(y_pred, 0, self.max_val)
+        y_true = torch.clamp(y_true, 0, self.max_val)
+        ssim_value = ssim(y_pred, y_true, data_range=self.max_val, size_average=True)
+        
+        # Combine the losses
+        loss = self.alpha * mse + self.beta * (1 - ssim_value)
+        return loss
 
 
 def train(train_loader, network, criterion, optimizer, scaler):
@@ -86,7 +106,7 @@ if __name__ == '__main__':
 	network = eval(args.model.replace('-', '_'))()
 	network = nn.DataParallel(network).cuda()
 
-	criterion = nn.L1Loss()
+	criterion = CombinedLoss()
 
 	if setting['optimizer'] == 'adam':
 		optimizer = torch.optim.Adam(network.parameters(), lr=setting['lr'])
